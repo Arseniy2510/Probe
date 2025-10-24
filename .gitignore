@@ -1,207 +1,139 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[codz]
-*$py.class
+import sys
+import math
 
-# C extensions
-*.so
+# Установим порог для сравнения чисел с плавающей точкой
+EPSILON = 1e-9
 
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+def solve_optimized():
+    """
+    Решение задачи с оптимизированной сложностью O(n log n).
+    """
+    # Увеличиваем лимит рекурсии/стека для работы с большими N
+    sys.setrecursionlimit(2000) 
+    
+    # --- 1. Чтение и подготовка данных ---
+    try:
+        input_data = sys.stdin.read().split()
+        if not input_data:
+            return
+        
+        n = int(input_data[0])
+        d = float(input_data[1])
+        
+        T_A_raw = [float(x) for x in input_data[2:2 + n]]
+        T_B_raw = [float(x) for x in input_data[2 + n:2 + 2 * n]]
+        
+    except Exception:
+        # В случае ошибок ввода
+        return
 
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
+    # Сортируем времена старта для быстрого поиска ближайшего оппонента
+    # Оптимизация: ближайший по t_O - это всегда следующий в отсортированном списке.
+    T_A_raw.sort()
+    T_B_raw.sort()
+    
+    # --- 2. Инициализация ---
+    
+    # Индексы для следующего неиспользованного оппонента в отсортированных списках
+    # T_A_idx - для лыжника команды A (нечетного)
+    # T_B_idx - для лыжника команды B (четного)
+    T_A_idx = 1  # Лыжник 1 (t_1) уже стартует с флагом.
+    T_B_idx = 0
+    
+    # Лыжник 1 (первый в T_A_raw) начинает с флагом
+    start_time = T_A_raw[0]
+    start_pos = 0.0        
+    total_distance = 0.0
+    
+    # 1: A несет, 0: B несет
+    current_carrier_is_A = True 
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
+    # --- 3. Основной цикл моделирования ---
+    
+    while True:
+        
+        # 3.1. Определение оппонента
+        
+        # Индекс в raw-списке, соответствующий следующему оппоненту
+        opponent_list = T_B_raw if current_carrier_is_A else T_A_raw
+        opponent_idx_ptr = T_B_idx if current_carrier_is_A else T_A_idx
+        
+        # Проверка на наличие оппонентов
+        if opponent_idx_ptr >= len(opponent_list):
+            next_runner_t_o = float('inf')
+        else:
+            next_runner_t_o = opponent_list[opponent_idx_ptr]
+            
+        # 3.2. Расчет времени доставки (финиша)
+        
+        if current_carrier_is_A:
+            # Движение к d (B)
+            time_to_delivery = d - start_pos
+            delivery_time = start_time + time_to_delivery
+            # Формула для t_meet (C из A, O из B):
+            # t_meet = (d + t_o + start_time - start_pos) / 2.0
+            t_meet_calc_term = d + start_time - start_pos
+        else:
+            # Движение к 0 (A)
+            time_to_delivery = start_pos - 0.0
+            delivery_time = start_time + time_to_delivery
+            # Формула для t_meet (C из B, O из A):
+            # t_meet = (start_pos + start_time + t_o) / 2.0
+            t_meet_calc_term = start_pos + start_time
+        
+        # 3.3. Расчет встречи с ближайшим оппонентом
+        
+        t_meet = float('inf')
+        
+        if next_runner_t_o != float('inf'):
+            if current_carrier_is_A:
+                t_meet = (t_meet_calc_term + next_runner_t_o) / 2.0
+            else:
+                t_meet = (t_meet_calc_term + next_runner_t_o) / 2.0
 
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py.cover
-.hypothesis/
-.pytest_cache/
-cover/
+        # 3.4. Принятие решения: Встреча, Доставка или Победа
+        
+        # Проверка, что встреча произойдет до доставки
+        is_meeting_before_delivery = (t_meet < delivery_time - EPSILON)
+        
+        # Проверка, что оппонент успеет стартовать до встречи
+        is_opponent_started_in_time = (t_meet >= next_runner_t_o - EPSILON)
 
-# Translations
-*.mo
-*.pot
+        if is_meeting_before_delivery and is_opponent_started_in_time:
+            # Событие: Встреча и передача флага
+            
+            # Расчет x_meet
+            if current_carrier_is_A:
+                x_meet = start_pos + (t_meet - start_time)
+            else:
+                x_meet = start_pos - (t_meet - start_time)
+                
+            distance_travelled = t_meet - start_time
+            total_distance += distance_travelled
+            
+            # Обновление состояния
+            start_time = t_meet
+            start_pos = x_meet
+            
+            # Переключение команды
+            if current_carrier_is_A:
+                T_B_idx += 1  # Оппонент B использован
+            else:
+                T_A_idx += 1  # Оппонент A использован
+                
+            current_carrier_is_A = not current_carrier_is_A
+            
+        else:
+            # Событие: Доставка флага (Победа)
+            
+            distance_travelled = delivery_time - start_time
+            total_distance += distance_travelled
+            break
+            
+    # --- 4. Вывод результата ---
+    
+    # Ответ должен быть целым числом.
+    print(f"{round(total_distance)}")
 
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-.pybuilder/
-target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# IPython
-profile_default/
-ipython_config.py
-
-# pyenv
-#   For a library or package, you might want to ignore these files since the code is
-#   intended to run in multiple environments; otherwise, check them in:
-# .python-version
-
-# pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
-
-# UV
-#   Similar to Pipfile.lock, it is generally recommended to include uv.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#uv.lock
-
-# poetry
-#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
-#poetry.lock
-#poetry.toml
-
-# pdm
-#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
-#   pdm recommends including project-wide configuration in pdm.toml, but excluding .pdm-python.
-#   https://pdm-project.org/en/latest/usage/project/#working-with-version-control
-#pdm.lock
-#pdm.toml
-.pdm-python
-.pdm-build/
-
-# pixi
-#   Similar to Pipfile.lock, it is generally recommended to include pixi.lock in version control.
-#pixi.lock
-#   Pixi creates a virtual environment in the .pixi directory, just like venv module creates one
-#   in the .venv directory. It is recommended not to include this directory in version control.
-.pixi
-
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
-__pypackages__/
-
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
-.env
-.envrc
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
-
-# pytype static type analyzer
-.pytype/
-
-# Cython debug symbols
-cython_debug/
-
-# PyCharm
-#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-#  and can be added to the global gitignore or merged into this file.  For a more nuclear
-#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
-#.idea/
-
-# Abstra
-# Abstra is an AI-powered process automation framework.
-# Ignore directories containing user credentials, local state, and settings.
-# Learn more at https://abstra.io/docs
-.abstra/
-
-# Visual Studio Code
-#  Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore 
-#  that can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
-#  and can be added to the global gitignore or merged into this file. However, if you prefer, 
-#  you could uncomment the following to ignore the entire vscode folder
-# .vscode/
-
-# Ruff stuff:
-.ruff_cache/
-
-# PyPI configuration file
-.pypirc
-
-# Cursor
-#  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to
-#  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data
-#  refer to https://docs.cursor.com/context/ignore-files
-.cursorignore
-.cursorindexingignore
-
-# Marimo
-marimo/_static/
-marimo/_lsp/
-__marimo__/
+if __name__ == "__main__":
+    solve_optimized()
